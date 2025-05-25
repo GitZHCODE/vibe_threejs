@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { setup as setupExample, update as updateExample } from './sketches/example_cube.js';
+import Stats from 'three/examples/jsm/libs/stats.module.js';
+import { setup as setupExample, update as updateExample } from './sketches/example_minSrfs.js';
 
 // Create scene
 const scene = new THREE.Scene();
@@ -18,6 +19,20 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel rat
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
+
+// Add FPS counter
+const stats = new Stats();
+stats.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
+document.body.appendChild(stats.dom);
+
+// Make stats panel smaller and more subtle
+stats.dom.style.transform = 'scale(0.5)';
+stats.dom.style.transformOrigin = 'top left';
+stats.dom.style.opacity = '0.8';
+stats.dom.style.position = 'absolute';
+stats.dom.style.top = '0';
+stats.dom.style.left = '0';
+stats.dom.style.zIndex = '100';
 
 // Add orbit controls
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -56,6 +71,9 @@ let currentObjects = setupExample(scene, camera);
 function animate() {
     requestAnimationFrame(animate);
     
+    // Begin measuring frame time
+    stats.begin();
+    
     // Update controls
     controls.update();
     
@@ -63,6 +81,9 @@ function animate() {
     updateExample(currentObjects);
     
     renderer.render(scene, camera);
+    
+    // End measuring frame time
+    stats.end();
 }
 
 animate(); 

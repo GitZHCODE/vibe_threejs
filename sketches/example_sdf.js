@@ -74,12 +74,12 @@ class SDFGrid {
         return new THREE.Points(geometry, this.material);
     }
 
-    // Proper marching squares contour extraction (complete lookup table)
-    createContour() {
+    // Proper marching squares contour extraction (complete lookup table) at any threshold
+    createContour(threshold = 0, color = 0x000000) {
         const vertices = [];
         const cellSize = 0.5 * (20/this.size);
         function interp(p1, p2, v1, v2) {
-            const t = v1 / (v1 - v2);
+            const t = (threshold - v1) / (v2 - v1);
             return [
                 p1[0] + t * (p2[0] - p1[0]),
                 p1[1] + t * (p2[1] - p1[1])
@@ -102,10 +102,10 @@ class SDFGrid {
                     this.field[i * this.size + (j+1)]
                 ];
                 let idx = 0;
-                if (v[0] > 0) idx |= 1;
-                if (v[1] > 0) idx |= 2;
-                if (v[2] > 0) idx |= 4;
-                if (v[3] > 0) idx |= 8;
+                if (v[0] > threshold) idx |= 1;
+                if (v[1] > threshold) idx |= 2;
+                if (v[2] > threshold) idx |= 4;
+                if (v[3] > threshold) idx |= 8;
                 const cases = [
                     [],
                     [[0,1]],
@@ -141,7 +141,7 @@ class SDFGrid {
         }
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        const material = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
+        const material = new THREE.LineBasicMaterial({ color: color, linewidth: 2 });
         return new THREE.LineSegments(geometry, material);
     }
 
@@ -169,13 +169,22 @@ export function setup(scene, camera) {
     }
 
     const points = sdfGrid.createVisualization();
-    const contour = sdfGrid.createContour();
-    
     scene.add(points);
-    scene.add(contour);
-    
+
+    // Draw stacked contours with gradient
+    const numContours = 16;
+    const maxThreshold = 3.0;
+    for (let i = 0; i < numContours; i++) {
+        const t = (i / (numContours - 1)) * maxThreshold;
+        // Gradient from black to white
+        const gray = Math.round(255 * (i / (numContours - 1)));
+        const color = (gray << 16) | (gray << 8) | gray;
+        const contour = sdfGrid.createContour(t, color);
+        scene.add(contour);
+    }
+
     // Return objects for animation
-    return { sdfGrid, points, contour };
+    return { sdfGrid, points };
 }
 
 export function update(objects) {
