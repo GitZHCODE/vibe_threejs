@@ -16,22 +16,40 @@ A simple Three.js project for students to learn and experiment with 3D graphics.
 ## Project Structure
 
 - `index.html` - The main HTML file
-- `main.js` - The main JavaScript file where you can edit the Three.js code
+- `main.js` - Core Three.js setup (don't modify this)
+- `sketches/` - Directory containing your 3D sketches
+  - `example.js` - Example sketch with a rotating cube
 - `package.json` - Project configuration and dependencies
 
-## How to Edit
+## How to Create Your Own Sketch
 
-1. Open `main.js` in your code editor
-2. Make changes to the code
-3. Save the file
-4. The browser will automatically refresh with your changes
+1. Create a new file in the `sketches` folder (e.g., `mySketch.js`)
+2. Copy this template:
+   ```javascript
+   import * as THREE from 'three';
+
+   export function setup(scene, camera) {
+       // Create your 3D objects here
+       // Return any objects you want to animate
+       return { /* your objects */ };
+   }
+
+   export function update(objects) {
+       // Animate your objects here
+   }
+   ```
+3. To use your sketch, modify the import in `main.js`:
+   ```javascript
+   import { setup, update } from './sketches/mySketch.js';
+   ```
 
 ## Example Modifications
 
-Try these simple changes in `main.js`:
-- Change the cube color: Modify the `color` value in `MeshBasicMaterial`
-- Change the rotation speed: Modify the values in `cube.rotation.x` and `cube.rotation.y`
+Try these simple changes in your sketch:
+- Change colors: Modify the `color` value in materials
+- Change positions: Modify object positions using `position.set(x, y, z)`
 - Add more objects: Create new geometries and add them to the scene
+- Change animations: Modify the `update` function
 
 ## Dependencies
 
