@@ -54,4 +54,18 @@ Try these simple changes in your sketch:
 ## Dependencies
 
 - Three.js - For 3D graphics
-- Vite - For development server and live reloading 
+- Vite - For development server and live reloading
+
+## Example Visualizations
+
+### Minimal Surfaces
+![Minimal Surfaces Example](./assets/img_minSrfs.png)
+*Visualization of minimal surfaces with stacked contours*
+
+### Signed Distance Fields
+![SDF Example](./assets/img_sdf.png)
+*Signed Distance Field visualization with contour lines*
+
+### Mesh Example
+![Cube Example](./assets/img_cube.png)
+*Basic mesh cube visualization* 
