@@ -1,6 +1,8 @@
-# Vibe Three.js Project
+# Vibe Three.js Project (Mapbox + Three.js Branch)
 
-A simple Three.js project for students to learn and experiment with 3D graphics.
+A branch of the main Vibe Three.js project, demonstrating how to integrate **Mapbox GL JS** with **Three.js** for custom 3D models, 3D buildings, and map styling.
+
+![Showcase](/assets/img_mapbox.png)
 
 ## Setup
 
@@ -11,15 +13,24 @@ A simple Three.js project for students to learn and experiment with 3D graphics.
    npm install
    npm start
    ```
-4. Open your browser and go to `http://localhost:5173`
+4. Open your browser and go to `http://localhost:5173` (or the port shown in your terminal)
 
 ## Project Structure
 
 - `index.html` - The main HTML file
-- `main.js` - Core Three.js setup (don't modify this)
+- `main.js` - Application entry point, sets up the renderer and animation loop
+- `renderers/mapbox_renderer.js` - Handles Mapbox map, custom Three.js layer, 3D buildings, and map styling
 - `sketches/` - Directory containing your 3D sketches
-  - `example.js` - Example sketch with a rotating cube
+  - `example_mapbox.js` - Loads the custom GLTF model and adds a rotating cube
+- `assets/img_mapbox.png` - Example screenshot
 - `package.json` - Project configuration and dependencies
+
+## Features (Mapbox Branch)
+- Mapbox GL JS map as the base
+- 3D buildings (white, fully opaque) rendered from Mapbox vector tiles
+- Custom 3D model (GLTF) placed at a georeferenced location
+- Rotating cube next to the model as an example of custom geometry
+- Water and green areas styled for clarity
 
 ## How to Create Your Own Sketch
 
@@ -43,29 +54,41 @@ A simple Three.js project for students to learn and experiment with 3D graphics.
    import { setup, update } from './sketches/mySketch.js';
    ```
 
-## Example Modifications
+## Customization
 
-Try these simple changes in your sketch:
-- Change colors: Modify the `color` value in materials
-- Change positions: Modify object positions using `position.set(x, y, z)`
-- Add more objects: Create new geometries and add them to the scene
-- Change animations: Modify the `update` function
+### Change the Model Location
+Edit the following in `sketches/example_mapbox.js`:
+```js
+export const MODEL_ORIGIN = [longitude, latitude];
+export const MODEL_ALTITUDE = 0; // meters
+export const MODEL_ROTATE = [Math.PI / 2, 0, 0]; // [X, Y, Z] radians
+```
+
+Find a location:
+[Location helper](https://labs.mapbox.com/location-helper/#15.71/31.24417/121.497531)
+
+### Use a Different 3D Model
+Replace the GLTF URL in `sketches/example_mapbox.js`:
+```js
+loader.load('https://your-model-url/model.gltf', ...);
+```
+
+### Adjust Map Appearance
+- 3D buildings color and opacity: see `add3DBuildingsLayer()` in `renderers/mapbox_renderer.js`
+- Water and green area colors: see `setBaseColors()` in `renderers/mapbox_renderer.js`
+
+### Add More Custom Geometry
+Add more objects to the Three.js scene in `sketches/example_mapbox.js`.
 
 ## Dependencies
-
-- Three.js - For 3D graphics
 - Vite - For development server and live reloading
+- Three.js - For 3D graphics
+- Mapbox GL JS - For interactive maps and 3D buildings
+- npm - For package management
 
-## Example Visualizations
+## Notes
+- The level of detail for Mapbox 3D buildings is determined by the map's zoom level and Mapbox's vector tile data.
+- For best results, use a high-quality GLTF model and adjust lighting as needed.
 
-### Minimal Surfaces
-![Minimal Surfaces Example](./assets/img_minSrfs.png)
-*Visualization of minimal surfaces with stacked contours*
-
-### Signed Distance Fields
-![SDF Example](./assets/img_sdf.png)
-*Signed Distance Field visualization with contour lines*
-
-### Mesh Example
-![Cube Example](./assets/img_cube.png)
-*Basic mesh cube visualization* 
+## License
+MIT 
