@@ -11,8 +11,10 @@ import json
 # np.random.seed(42)
 # tf.random.set_seed(42)
 
-# Import the SDF generator
-from sdf_generator import generate_sdf_dataset_sample, normalize_sdf_dataset
+# Import the SDF generator --> change to three.js dataset
+# from sdf_generator import generate_sdf_dataset_sample, normalize_sdf_dataset
+
+
 
 # Generate a minimal dataset (one sample per shape class)
 x_data, y_data = generate_sdf_dataset_sample(n_samples_per_class=1)

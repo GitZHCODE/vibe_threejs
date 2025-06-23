@@ -1,71 +1,73 @@
-# Vibe Three.js Project
+# Vibe Three.js - Latent SDF Training
 
-A simple Three.js project for students to learn and experiment with 3D graphics.
+An interactive auto-decoder training system for SDF (Signed Distance Field) shapes using Three.js and TensorFlow.js.
 
-## Setup
+## Features
 
-1. Make sure you have [Node.js](https://nodejs.org/) installed on your computer
-2. Open a terminal in this project folder
-3. Run these commands:
+- **Interactive Polygon Drawing**: Click on the ground plane to draw custom polygons
+- **SDF Generation**: Converts drawn polygons into signed distance fields
+- **Auto-Decoder Training**: Trains a neural network to encode shapes into a 2D latent space
+- **Latent Space Visualization**: Shows how the latent space maps to different SDF shapes
+- **Real-time Training**: All training happens in the browser using TensorFlow.js
+
+## How to Use
+
+1. **Install Dependencies**:
    ```bash
    npm install
-   npm start
-   ```
-4. Open your browser and go to `http://localhost:5173`
-
-## Project Structure
-
-- `index.html` - The main HTML file
-- `main.js` - Core Three.js setup (don't modify this)
-- `sketches/` - Directory containing your 3D sketches
-  - `example.js` - Example sketch with a rotating cube
-- `package.json` - Project configuration and dependencies
-
-## How to Create Your Own Sketch
-
-1. Create a new file in the `sketches` folder (e.g., `mySketch.js`)
-2. Copy this template:
-   ```javascript
-   import * as THREE from 'three';
-
-   export function setup(scene, camera) {
-       // Create your 3D objects here
-       // Return any objects you want to animate
-       return { /* your objects */ };
-   }
-
-   export function update(objects) {
-       // Animate your objects here
-   }
-   ```
-3. To use your sketch, modify the import in `main.js`:
-   ```javascript
-   import { setup, update } from './sketches/mySketch.js';
    ```
 
-## Example Modifications
+2. **Start Development Server**:
+   ```bash
+   npm run dev
+   ```
 
-Try these simple changes in your sketch:
-- Change colors: Modify the `color` value in materials
-- Change positions: Modify object positions using `position.set(x, y, z)`
-- Add more objects: Create new geometries and add them to the scene
-- Change animations: Modify the `update` function
+3. **Draw Polygons**:
+   - Click "Draw Polygon" button
+   - Click on the ground plane to add points
+   - Press Enter to finish the polygon
+   - Press Escape to cancel current drawing
+   - Draw multiple different shapes
 
-## Dependencies
+4. **Train the Model**:
+   - Click "Train Model" after drawing several polygons
+   - Wait for training to complete (1000 epochs)
+   - Watch the latent space visualization update
 
-- Three.js - For 3D graphics
-- Vite - For development server and live reloading
+5. **Explore Results**:
+   - The grid shows how different points in the 2D latent space map to different SDF shapes
+   - Each grid cell represents a point in latent space and its corresponding generated shape
 
-## Example Visualizations
+## Controls
 
-### Minimal Surfaces
-![Minimal Surfaces Example](./assets/img_minSrfs.png)
-*Visualization of minimal surfaces with stacked contours*
+- **Mouse**: Orbit around the scene
+- **Scroll**: Zoom in/out
+- **Click**: Add polygon points when drawing
+- **Enter**: Finish current polygon
+- **Escape**: Cancel current drawing
 
-### Signed Distance Fields
-![SDF Example](./assets/img_sdf.png)
-*Signed Distance Field visualization with contour lines*
+## Technical Details
 
-### Mesh Example
-![Cube Example](./assets/img_cube.png)
-*Basic mesh cube visualization* 
+- **SDF Resolution**: 64x64 grid
+- **Latent Dimensions**: 2D (for easy visualization)
+- **Network Architecture**: 
+  - Input: 2D latent code
+  - Hidden: 128 → 256 → 512 neurons (ReLU)
+  - Output: 4096 values (64×64 SDF, sigmoid activation)
+- **Training**: Auto-decoder with learnable latent codes per shape
+- **Visualization**: 10×10 grid showing latent space interpolation
+
+## Files
+
+- `main.js`: Main application setup with Three.js scene
+- `sketches/example_latentSDF.js`: Core implementation of the auto-decoder system
+- `train/train.py`: Original Python reference implementation
+- `sketches/example_sdf.js`: Original SDF visualization example
+
+## Architecture
+
+The system implements an auto-decoder architecture similar to DeepSDF:
+1. Each input shape gets a unique learnable latent code
+2. The decoder network maps latent codes to SDF values
+3. Both the decoder weights and latent codes are optimized during training
+4. After training, we can interpolate in latent space to generate new shapes

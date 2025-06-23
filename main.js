@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
-import { setup as setupExample, update as updateExample } from './sketches/example_sdf.js';
+import { setup as setupExample, update as updateExample } from './sketches/example_latentSDF.js';
 
 // Create scene
 const scene = new THREE.Scene();
@@ -9,7 +9,7 @@ scene.background = new THREE.Color(0xffffff); // White background
 
 // Create camera with 35mm equivalent field of view
 const camera = new THREE.PerspectiveCamera(54, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(10, 10, 10); // Adjusted position for better view of the grid
+camera.position.set(15, 15, 15); // Adjusted position for better view of the latent grid
 camera.lookAt(0, 0, 0);
 
 // Create renderer with better quality settings
@@ -65,7 +65,7 @@ window.addEventListener('resize', () => {
 });
 
 // Initialize the current sketch
-let currentObjects = setupExample(scene, camera);
+let currentObjects = setupExample(scene, camera, renderer);
 
 // Animation loop
 function animate() {
@@ -76,9 +76,8 @@ function animate() {
     
     // Update controls
     controls.update();
-    
-    // Update the current sketch
-    updateExample(currentObjects);
+      // Update the current sketch
+    updateExample(currentObjects, renderer);
     
     renderer.render(scene, camera);
     
