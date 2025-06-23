@@ -1,5 +1,5 @@
 import { MapboxRenderer } from './renderers/mapbox_renderer.js';
-import { setup as setupExample, update as updateExample, MODEL_ORIGIN, MODEL_ALTITUDE, MODEL_ROTATE } from './sketches/example_mapbox.js';
+import { setup as setupExample, update as updateExample, MODEL_ORIGIN, MODEL_ALTITUDE, MODEL_ROTATE } from './sketches/example_mapboxAIRender.js';
 
 class Application {
     constructor() {
@@ -18,7 +18,9 @@ class Application {
         this.mapboxRenderer = new MapboxRenderer('container', {
             center: MODEL_ORIGIN,
             altitude: MODEL_ALTITUDE,
-            rotation: MODEL_ROTATE
+            rotation: MODEL_ROTATE,
+            // Add preserveDrawingBuffer for canvas capture
+            preserveDrawingBuffer: true
         });
 
         // Wait for the scene to be ready before setting up the sketch
@@ -26,7 +28,8 @@ class Application {
             // Initialize the current sketch
             this.currentObjects = setupExample(
                 this.mapboxRenderer.getScene(),
-                this.mapboxRenderer.getCamera()
+                this.mapboxRenderer.getCamera(),
+                this.mapboxRenderer // Pass renderer for canvas access
             );
             // Pass transformation parameters to the renderer
             this.mapboxRenderer.setCurrentObjects(this.currentObjects);
@@ -44,10 +47,18 @@ class Application {
         }
     }
 
+    // Add method to get renderer for canvas capture
+    getRenderer() {
+        return this.mapboxRenderer;
+    }
+
     destroy() {
         this.mapboxRenderer.destroy();
     }
 }
 
 // Initialize the application
-const app = new Application(); 
+const app = new Application();
+
+// Make app globally accessible for canvas capture
+window.app = app;

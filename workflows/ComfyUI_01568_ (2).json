@@ -1,0 +1,304 @@
+{
+  "154": {
+    "inputs": {
+      "ckpt_name": "sd_xl_refiner_1.0.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Refiner"
+    }
+  },
+  "155": {
+    "inputs": {
+      "width": 1600,
+      "height": 904,
+      "crop_w": 0,
+      "crop_h": 0,
+      "target_width": 1600,
+      "target_height": 904,
+      "text_g": "ext001,ext007,Zaha hadid architect design,ZHA,eye level view,(school building),road,canopy,trees, (plaza),  (plaground),grass, low density buildings,Eco-friendly,flowers,residential building,people in plaza,(kid cyclying) ,daylight, architectural photography, high quality, ultra-high details, 8K, HD\n",
+      "text_l": "ext001,ext007,Zaha hadid architect design,ZHA,eye level view,(school building),road,canopy,trees, (plaza),  (plaground),grass, low density buildings,Eco-friendly,flowers,residential building,people in plaza,(kid cyclying) ,daylight, architectural photography, high quality, ultra-high details, 8K, HD\n",
+      "clip": [
+        "275",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncodeSDXL",
+    "_meta": {
+      "title": "CLIPTextEncodeSDXL"
+    }
+  },
+  "156": {
+    "inputs": {
+      "ascore": 6,
+      "width": 1600,
+      "height": 904,
+      "text": "ext001,ext007,Zaha hadid architect design,ZHA,eye level view,(school building),road,canopy,trees, (plaza),  (plaground),grass, low density buildings,Eco-friendly,flowers,residential building,people in plaza,(kid cyclying) ,daylight, architectural photography, high quality, ultra-high details, 8K, HD\n",
+      "clip": [
+        "154",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncodeSDXLRefiner",
+    "_meta": {
+      "title": "CLIPTextEncodeSDXLRefiner"
+    }
+  },
+  "157": {
+    "inputs": {
+      "ckpt_name": "robmix_zenithV30.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Base"
+    }
+  },
+  "160": {
+    "inputs": {
+      "width": 1600,
+      "height": 904,
+      "crop_w": 0,
+      "crop_h": 0,
+      "target_width": 1600,
+      "target_height": 904,
+      "text_g": " 16-token-negative-deliberate-neg,realisticvision-negative-embedding,ng_deepnegative_v1_75t, lowres, bad anatomy, blurry, cartoonish, low resolution, twisting, broken, dirty, outdated, unfinished, out of focus, deformed, poorly lit, old-fashioned, full white, crowd, text, watermark, error, worst quality, signature",
+      "text_l": " 16-token-negative-deliberate-neg,realisticvision-negative-embedding,ng_deepnegative_v1_75t, lowres, bad anatomy, blurry, cartoonish, low resolution, twisting, broken, dirty, outdated, unfinished, out of focus, deformed, poorly lit, old-fashioned, full white, crowd, text, watermark, error, worst quality, signature",
+      "clip": [
+        "275",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncodeSDXL",
+    "_meta": {
+      "title": "CLIPTextEncodeSDXL"
+    }
+  },
+  "161": {
+    "inputs": {
+      "ascore": 6,
+      "width": 1600,
+      "height": 904,
+      "text": " 16-token-negative-deliberate-neg,realisticvision-negative-embedding,ng_deepnegative_v1_75t, lowres, bad anatomy, blurry, cartoonish, low resolution, twisting, broken, dirty, outdated, unfinished, out of focus, deformed, poorly lit, old-fashioned, full white, crowd, text, watermark, error, worst quality, signature",
+      "clip": [
+        "154",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncodeSDXLRefiner",
+    "_meta": {
+      "title": "CLIPTextEncodeSDXLRefiner"
+    }
+  },
+  "162": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": 1075937492039079,
+      "steps": 30,
+      "cfg": 6.1000000000000005,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "normal",
+      "start_at_step": 0,
+      "end_at_step": 10000,
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "275",
+        0
+      ],
+      "positive": [
+        "260",
+        0
+      ],
+      "negative": [
+        "260",
+        1
+      ],
+      "latent_image": [
+        "163",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "KSampler (Advanced)Base"
+    }
+  },
+  "163": {
+    "inputs": {
+      "width": 1600,
+      "height": 904,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "IMG size"
+    }
+  },
+  "164": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": 1075937492039079,
+      "steps": 15,
+      "cfg": 7,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "normal",
+      "start_at_step": 30,
+      "end_at_step": 10000,
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "154",
+        0
+      ],
+      "positive": [
+        "156",
+        0
+      ],
+      "negative": [
+        "161",
+        0
+      ],
+      "latent_image": [
+        "162",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "KSampler (Advanced)Refiner"
+    }
+  },
+  "171": {
+    "inputs": {
+      "samples": [
+        "164",
+        0
+      ],
+      "vae": [
+        "154",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "172": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "171",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "222": {
+    "inputs": {
+      "control_net_name": "sdxl_segmentation_ade20k_controlnet.safetensors"
+    },
+    "class_type": "ControlNetLoader",
+    "_meta": {
+      "title": "ControlNet Model"
+    }
+  },
+  "224": {
+    "inputs": {
+      "image": "ViewCapture20250510_115758.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "ControlNet IMG"
+    }
+  },
+  "260": {
+    "inputs": {
+      "strength": 0.4000000000000001,
+      "start_percent": 0,
+      "end_percent": 1,
+      "positive": [
+        "155",
+        0
+      ],
+      "negative": [
+        "160",
+        0
+      ],
+      "control_net": [
+        "222",
+        0
+      ],
+      "image": [
+        "224",
+        0
+      ],
+      "vae": [
+        "157",
+        2
+      ]
+    },
+    "class_type": "ControlNetApplyAdvanced",
+    "_meta": {
+      "title": "Strength"
+    }
+  },
+  "275": {
+    "inputs": {
+      "lora_name": "EXT_001_SDXL.safetensors",
+      "strength_model": 0.9000000000000001,
+      "strength_clip": 0.9000000000000001,
+      "model": [
+        "157",
+        0
+      ],
+      "clip": [
+        "157",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "Load LoRA"
+    }
+  },
+  "277": {
+    "inputs": {
+      "model_name": "4xUltrasharp_4xUltrasharpV10.pt"
+    },
+    "class_type": "UpscaleModelLoader",
+    "_meta": {
+      "title": "Load Upscale Model"
+    }
+  },
+  "278": {
+    "inputs": {
+      "upscale_model": [
+        "277",
+        0
+      ],
+      "image": [
+        "171",
+        0
+      ]
+    },
+    "class_type": "ImageUpscaleWithModel",
+    "_meta": {
+      "title": "Upscale Image (using Model)"
+    }
+  },
+  "280": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "278",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}
