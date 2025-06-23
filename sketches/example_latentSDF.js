@@ -167,7 +167,7 @@ class AutoDecoder {
         
         // Initialize learnable latent codes with smaller variance
         this.latentCodes = tf.variable(
-            tf.randomNormal([numShapes, this.latentDim], 0, 0.01)
+            tf.randomNormal([numShapes, this.latentDim], 0, 0.5)
         );
         
         // Use a smaller learning rate
@@ -540,14 +540,14 @@ class LatentSpaceVisualizer {
                 if (i === 0 && j === 0) {
                     console.log(`Sample SDF stats at (${x.toFixed(3)}, ${y.toFixed(3)}): min=${sdfMin.toFixed(3)}, max=${sdfMax.toFixed(3)}, mean=${sdfMean.toFixed(3)}`);
                 }
-                
-                // Create contour visualization
+                  // Create contour visualization
                 const contour = this.createSDFContour(sdf, 0.5);
-                contour.position.set(
+                const contourPosition = new THREE.Vector3(
                     (i - this.gridSize/2) * 3,
                     0,
                     (j - this.gridSize/2) * 3
                 );
+                contour.position.copy(contourPosition);
                 contour.scale.setScalar(0.3);
                 
                 this.scene.add(contour);
@@ -555,7 +555,7 @@ class LatentSpaceVisualizer {
                 
                 // Add coordinate label
                 const label = this.createLabel(`(${x.toFixed(1)}, ${y.toFixed(1)})`);
-                label.position.copy(contour.position);
+                label.position.copy(contourPosition);
                 label.position.y += 0.5;
                 this.scene.add(label);
                 this.visualizationObjects.push(label);
@@ -566,7 +566,7 @@ class LatentSpaceVisualizer {
                     if (Math.abs(code[0] - x) < stepX/2 && Math.abs(code[1] - y) < stepY/2) {
                         // This grid point is close to a learned latent code
                         const marker = this.createLatentMarker(k);
-                        marker.position.copy(contour.position);
+                        marker.position.copy(contourPosition);
                         marker.position.y += 1;
                         this.scene.add(marker);
                         this.visualizationObjects.push(marker);
