@@ -74,9 +74,7 @@ class SDFGenerator {
             const clippedValue = Math.max(-5, Math.min(5, value * steepness));
             return 1 / (1 + Math.exp(clippedValue));
         });
-    }
-
-    // Create SDF visualization as a grid of points
+    }    // Create SDF visualization as colored points (consistent with example_sdf.js)
     createSDFVisualization(field, position = { x: 0, z: 0 }, scale = 1) {
         const geometry = new THREE.BufferGeometry();
         const positions = [];
@@ -91,12 +89,16 @@ class SDFGenerator {
                 const z = ((j - this.size/2) / this.size) * this.scale * scale + position.z;
                 positions.push(x, 0.1, z);
 
-                // Color based on field value (red for positive, blue for negative)
+                // Color based on field value (red for positive/outside, blue for negative/inside)
                 const color = new THREE.Color();
                 if (value > 0) {
-                    color.setRGB(Math.min(value * 2, 1), 0, 0);  // Red for positive
+                    // Outside shape - red gradient
+                    const intensity = Math.min(Math.abs(value) / 2, 1);
+                    color.setRGB(intensity, 0, 0);
                 } else {
-                    color.setRGB(0, 0, Math.min(-value * 2, 1)); // Blue for negative
+                    // Inside shape - blue gradient
+                    const intensity = Math.min(Math.abs(value) / 2, 1);
+                    color.setRGB(0, 0, intensity);
                 }
                 colors.push(color.r, color.g, color.b);
             }
@@ -149,20 +151,18 @@ class AutoDecoder {
         this.decoder = null;
         this.latentCodes = null;
         this.optimizer = tf.train.adam(0.001);
-    }
-
-    // Create decoder model
+        this.trainingData = null; // Store training polygons
+    }    // Create decoder model
     createDecoder() {
         const model = tf.sequential({
             layers: [
-                tf.layers.dense({ inputShape: [this.latentDim], units: 128, activation: 'relu' }),
-                tf.layers.dense({ units: 256, activation: 'relu' }),
-                tf.layers.dense({ units: 512, activation: 'relu' }),
+                tf.layers.dense({ inputShape: [this.latentDim], units: 64, activation: 'relu' }),
+                tf.layers.dense({ units: 128, activation: 'relu' }),
                 tf.layers.dense({ units: this.sdfSize * this.sdfSize, activation: 'sigmoid' })
             ]
         });
         return model;
-    }    // Initialize for training
+    }// Initialize for training
     async initialize(numShapes) {
         this.decoder = this.createDecoder();
         
@@ -237,6 +237,376 @@ class AutoDecoder {
     // Get current latent codes
     getCurrentLatentCodes() {
         return this.latentCodes.arraySync();
+    }    // Save trained model and data using File System Access API
+    async saveTrainedData() {
+        try {
+            console.log('Saving trained data using File System Access API...');
+            
+            // Check if File System Access API is supported
+            if (!window.showDirectoryPicker) {
+                console.warn('File System Access API not supported, falling back to IndexedDB');
+                return await this.saveToBrowserStorage();
+            }
+            
+            // Ask user to select the data directory
+            const dirHandle = await window.showDirectoryPicker();
+            
+            // Save model files
+            await this.saveModelToDirectory(dirHandle);
+            
+            // Save metadata
+            const latentCodes = this.getCurrentLatentCodes();
+            const trainedData = {
+                latentCodes: latentCodes,
+                trainingPolygons: this.trainingData,
+                latentDim: this.latentDim,
+                sdfSize: this.sdfSize,
+                timestamp: new Date().toISOString()
+            };
+            
+            await this.saveMetadataToDirectory(dirHandle, trainedData);
+            
+            console.log('Trained data saved successfully to selected directory');
+            this.showSuccessMessage();
+            
+            return true;
+        } catch (error) {
+            if (error.name === 'SecurityError' && error.message.includes('user gesture')) {
+                console.warn('File System Access API requires user gesture - this is expected');
+                throw error; // Re-throw to let the UI handle it
+            }
+            
+            console.error('Error saving with File System Access API:', error);
+            
+            // Fallback to browser storage
+            try {
+                console.log('Attempting browser storage fallback...');
+                return await this.saveToBrowserStorage();
+            } catch (fallbackError) {
+                console.error('All storage methods failed:', fallbackError);
+                return false;
+            }
+        }
+    }    // Save model to directory using File System Access API
+    async saveModelToDirectory(dirHandle) {
+        try {
+            // Create a custom save handler that captures the full model artifacts
+            let capturedArtifacts = null;
+            
+            const saveHandler = tf.io.withSaveHandler(async (artifacts) => {
+                capturedArtifacts = artifacts;
+                return { modelArtifactsInfo: { dateSaved: new Date(), modelTopologyType: 'JSON' } };
+            });
+            
+            // Save to capture artifacts
+            await this.decoder.save(saveHandler);
+            
+            if (!capturedArtifacts) {
+                throw new Error('Failed to capture model artifacts');
+            }
+            
+            // Create the model.json with proper TensorFlow.js format
+            const modelJson = {
+                modelTopology: capturedArtifacts.modelTopology,
+                weightsManifest: [{
+                    paths: ['weights.bin'],
+                    weights: capturedArtifacts.weightSpecs
+                }],
+                format: 'layers-model',
+                generatedBy: 'TensorFlow.js tfjs-layers v' + tf.version.tfjs,
+                convertedBy: null
+            };
+            
+            // Save model.json
+            const modelJsonFile = await dirHandle.getFileHandle('model.json', { create: true });
+            const modelJsonWritable = await modelJsonFile.createWritable();
+            await modelJsonWritable.write(JSON.stringify(modelJson, null, 2));
+            await modelJsonWritable.close();
+            
+            // Save weights.bin
+            const weightsFile = await dirHandle.getFileHandle('weights.bin', { create: true });
+            const weightsWritable = await weightsFile.createWritable();
+            await weightsWritable.write(capturedArtifacts.weightData);
+            await weightsWritable.close();
+            
+            console.log('Model files saved successfully');
+        } catch (error) {
+            throw new Error(`Failed to save model to directory: ${error.message}`);
+        }
+    }
+
+    // Save metadata to directory
+    async saveMetadataToDirectory(dirHandle, data) {
+        try {
+            const metadataFile = await dirHandle.getFileHandle('latent-sdf-metadata.json', { create: true });
+            const metadataWritable = await metadataFile.createWritable();
+            await metadataWritable.write(JSON.stringify(data, null, 2));
+            await metadataWritable.close();
+            
+            console.log('Metadata saved successfully');
+        } catch (error) {
+            throw new Error(`Failed to save metadata: ${error.message}`);
+        }
+    }
+
+    // Show success message
+    showSuccessMessage() {
+        const messageDiv = document.createElement('div');
+        messageDiv.style.position = 'fixed';
+        messageDiv.style.top = '50%';
+        messageDiv.style.left = '50%';
+        messageDiv.style.transform = 'translate(-50%, -50%)';
+        messageDiv.style.background = 'rgba(0,128,0,0.9)';
+        messageDiv.style.color = 'white';
+        messageDiv.style.padding = '20px';
+        messageDiv.style.borderRadius = '10px';
+        messageDiv.style.zIndex = '10000';
+        messageDiv.style.fontFamily = 'Arial, sans-serif';
+          messageDiv.innerHTML = `
+            <h3>Training Data Saved Successfully!</h3>
+            <p>Files have been saved to the selected directory:</p>
+            <ul>
+                <li>latent-sdf-metadata.json</li>
+                <li>model.json</li>
+                <li>weights.bin</li>
+            </ul>
+            <p>You can now use the tower example to load your trained model!</p>
+            <button id="closeMessage" style="padding: 10px 20px; margin-top: 10px;">Close</button>
+        `;
+        
+        document.body.appendChild(messageDiv);
+        
+        document.getElementById('closeMessage').onclick = () => {
+            document.body.removeChild(messageDiv);
+        };
+        
+        // Auto-close after 10 seconds
+        setTimeout(() => {
+            if (document.body.contains(messageDiv)) {
+                document.body.removeChild(messageDiv);
+            }
+        }, 10000);
+    }
+
+    // Fallback to browser storage
+    async saveToBrowserStorage() {
+        try {
+            // Use IndexedDB as fallback
+            await this.decoder.save('indexeddb://latent-sdf-model');
+            
+            const latentCodes = this.getCurrentLatentCodes();
+            
+            const trainedData = {
+                latentCodes: latentCodes,
+                trainingPolygons: this.trainingData,
+                latentDim: this.latentDim,
+                sdfSize: this.sdfSize,
+                timestamp: new Date().toISOString()
+            };
+            
+            localStorage.setItem('latent-sdf-metadata', JSON.stringify(trainedData));
+            
+            console.log('Trained data saved to browser storage as fallback');
+            return true;
+        } catch (error) {
+            throw new Error(`Browser storage fallback failed: ${error.message}`);
+        }
+    }
+
+    // Fallback method with compressed data
+    async saveCompressedData() {
+        try {
+            // Extract only the most essential model weights (first and last layers)
+            const essentialWeights = [];
+            const weightShapes = [];
+            
+            const layers = this.decoder.layers;
+            const layersToSave = [0, layers.length - 1]; // First and last layers only
+            
+            for (const layerIndex of layersToSave) {
+                const layer = layers[layerIndex];
+                if (layer.getWeights && layer.getWeights().length > 0) {
+                    const weights = layer.getWeights();
+                    for (let j = 0; j < weights.length; j++) {
+                        const weightData = await weights[j].data();
+                        // Quantize weights to reduce size (convert to 8-bit)
+                        const quantizedWeights = Array.from(weightData).map(w => 
+                            Math.round(Math.max(-127, Math.min(127, w * 127)) / 127 * 100) / 100
+                        );
+                        essentialWeights.push(quantizedWeights);
+                        weightShapes.push(weights[j].shape);
+                    }
+                }
+            }
+            
+            const latentCodes = this.getCurrentLatentCodes();
+            
+            const compressedData = {
+                latentCodes: latentCodes,
+                trainingPolygons: this.trainingData,
+                latentDim: this.latentDim,
+                sdfSize: this.sdfSize,
+                essentialWeights: essentialWeights,
+                weightShapes: weightShapes,
+                layersToSave: layersToSave,
+                isCompressed: true,
+                timestamp: new Date().toISOString()
+            };
+            
+            localStorage.setItem('latent-sdf-compressed', JSON.stringify(compressedData));
+            console.log('Compressed training data saved to localStorage');
+            return true;
+        } catch (error) {
+            console.error('Even compressed storage failed:', error);
+            return false;
+        }
+    }
+
+    // Clear saved data
+    clearSavedData() {
+        // Clear IndexedDB model
+        try {
+            tf.io.removeModel('indexeddb://latent-sdf-model');
+        } catch (error) {
+            console.warn('Could not clear IndexedDB model:', error);
+        }
+        
+        // Clear localStorage data
+        localStorage.removeItem('latent-sdf-metadata');
+        localStorage.removeItem('latent-sdf-compressed');
+        
+        // Clear old chunked data
+        const chunkCount = localStorage.getItem('latent-sdf-chunks');
+        if (chunkCount) {
+            const numChunks = parseInt(chunkCount);
+            for (let i = 0; i < numChunks; i++) {
+                localStorage.removeItem(`latent-sdf-chunk-${i}`);
+            }
+            localStorage.removeItem('latent-sdf-chunks');
+        }
+        localStorage.removeItem('latent-sdf-data');
+    }    // Load trained model and data using File System Access API or fallbacks
+    static async loadTrainedData() {
+        try {
+            // First attempt: File System Access API to read from selected directory
+            if (window.showDirectoryPicker) {
+                try {
+                    const result = await AutoDecoder.loadFromFileSystem();
+                    if (result) return result;
+                } catch (fsError) {
+                    console.warn('File System Access API failed:', fsError);
+                }
+            }
+            
+            // Second attempt: Try loading from local data folder (when served via local server)
+            try {
+                const result = await AutoDecoder.loadFromLocalFolder();
+                if (result) return result;
+            } catch (localError) {
+                console.warn('Failed to load from local data folder:', localError);
+            }
+            
+            // Third attempt: Fallback to IndexedDB
+            try {
+                const result = await AutoDecoder.loadFromIndexedDB();
+                if (result) return result;
+            } catch (indexedDbError) {
+                console.warn('Failed to load from IndexedDB:', indexedDbError);
+            }
+            
+            console.log('No saved training data found in any location');
+            return null;
+            
+        } catch (error) {
+            console.error('Error loading trained data:', error);
+            return null;
+        }
+    }    // Load from File System Access API
+    static async loadFromFileSystem() {
+        try {
+            const dirHandle = await window.showDirectoryPicker();
+            
+            // Load metadata
+            const metadataFileHandle = await dirHandle.getFileHandle('latent-sdf-metadata.json');
+            const metadataFile = await metadataFileHandle.getFile();
+            const metadataText = await metadataFile.text();
+            const metadata = JSON.parse(metadataText);
+            
+            // Create new AutoDecoder instance
+            const autoDecoder = new AutoDecoder(metadata.latentDim, metadata.sdfSize);
+            
+            // Create a custom IO handler for loading from the directory
+            const loadHandler = tf.io.browserFiles([
+                await dirHandle.getFileHandle('model.json').then(h => h.getFile()),
+                await dirHandle.getFileHandle('weights.bin').then(h => h.getFile())
+            ]);
+            
+            // Load the model using the standard TensorFlow.js loader
+            autoDecoder.decoder = await tf.loadLayersModel(loadHandler);
+            
+            // Recreate latent codes as TensorFlow variables
+            autoDecoder.latentCodes = tf.variable(tf.tensor2d(metadata.latentCodes));
+            autoDecoder.trainingData = metadata.trainingPolygons;
+            
+            console.log('Trained data loaded successfully from File System Access API');
+            console.log('Loaded polygons:', metadata.trainingPolygons?.length || 0);
+            console.log('Loaded latent codes:', metadata.latentCodes);
+            
+            return autoDecoder;
+        } catch (error) {
+            if (error.name === 'SecurityError' && error.message.includes('user gesture')) {
+                console.warn('File System Access API requires user gesture for loading');
+            }
+            throw error;
+        }
+    }    // Load from local data folder
+    static async loadFromLocalFolder() {
+        // Load metadata
+        const metadataResponse = await fetch('./data/latent-sdf-metadata.json');
+        if (!metadataResponse.ok) throw new Error('Metadata not found');
+        
+        const metadata = await metadataResponse.json();
+        
+        // Create new AutoDecoder instance
+        const autoDecoder = new AutoDecoder(metadata.latentDim, metadata.sdfSize);
+        
+        // Load the model from local folder using standard path
+        const modelPath = './data/model.json';
+        autoDecoder.decoder = await tf.loadLayersModel(modelPath);
+        
+        // Recreate latent codes as TensorFlow variables
+        autoDecoder.latentCodes = tf.variable(tf.tensor2d(metadata.latentCodes));
+        autoDecoder.trainingData = metadata.trainingPolygons;
+        
+        console.log('Trained data loaded successfully from local data folder');
+        console.log('Loaded polygons:', metadata.trainingPolygons?.length || 0);
+        console.log('Loaded latent codes:', metadata.latentCodes);
+        
+        return autoDecoder;
+    }
+
+    // Load from IndexedDB
+    static async loadFromIndexedDB() {
+        const metadataStr = localStorage.getItem('latent-sdf-metadata');
+        if (!metadataStr) throw new Error('No metadata in localStorage');
+        
+        const metadata = JSON.parse(metadataStr);
+        
+        // Create new AutoDecoder instance
+        const autoDecoder = new AutoDecoder(metadata.latentDim, metadata.sdfSize);
+        
+        // Load the model from IndexedDB
+        autoDecoder.decoder = await tf.loadLayersModel('indexeddb://latent-sdf-model');
+        
+        // Recreate latent codes as TensorFlow variables
+        autoDecoder.latentCodes = tf.variable(tf.tensor2d(metadata.latentCodes));
+        autoDecoder.trainingData = metadata.trainingPolygons;
+        
+        console.log('Trained data loaded successfully from IndexedDB (fallback)');
+        console.log('Loaded polygons:', metadata.trainingPolygons?.length || 0);
+        console.log('Loaded latent codes:', metadata.latentCodes);
+        
+        return autoDecoder;
     }
 }
 
@@ -301,10 +671,14 @@ class PolygonDrawer {
         const drawBtn = document.createElement('button');
         drawBtn.textContent = 'Draw Polygon';
         drawBtn.onclick = () => this.startDrawing();
-        
-        const trainBtn = document.createElement('button');
+          const trainBtn = document.createElement('button');
         trainBtn.textContent = 'Train Model';
         trainBtn.onclick = () => this.onTrainCallback && this.onTrainCallback();
+        
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Save Model';
+        saveBtn.style.display = 'none';
+        saveBtn.onclick = () => this.onSaveCallback && this.onSaveCallback();
         
         const clearBtn = document.createElement('button');
         clearBtn.textContent = 'Clear All';
@@ -316,14 +690,15 @@ class PolygonDrawer {
             <div>Polygons: ${this.polygons.length}</div>
             <div>Click to add points, Enter to finish, Esc to cancel</div>
         `;
-        
-        ui.appendChild(drawBtn);
+          ui.appendChild(drawBtn);
         ui.appendChild(trainBtn);
+        ui.appendChild(saveBtn);
         ui.appendChild(clearBtn);
         ui.appendChild(status);
         
         document.body.appendChild(ui);
         this.statusDiv = status;
+        this.saveBtn = saveBtn;
     }
 
     updateStatus() {
@@ -477,10 +852,18 @@ class PolygonDrawer {
         objectsToRemove.forEach(obj => this.scene.remove(obj));
         
         this.updateStatus();
-    }
-
-    setTrainCallback(callback) {
+    }    setTrainCallback(callback) {
         this.onTrainCallback = callback;
+    }
+    
+    setSaveCallback(callback) {
+        this.onSaveCallback = callback;
+    }
+    
+    showSaveButton() {
+        if (this.saveBtn) {
+            this.saveBtn.style.display = 'block';
+        }
     }
 }
 
@@ -580,89 +963,111 @@ class LatentSpaceVisualizer {
                 }
             }
         }
-    }createSDFContour(sdfArray, threshold) {
+    }    createSDFContour(sdfArray, threshold) {
         const vertices = [];
         const size = this.autoDecoder.sdfSize;
         const cellSize = 10 / size;
         
-        // Linear interpolation for edge intersections
+        // Improved linear interpolation for edge intersections
         function lerp(p1, p2, v1, v2, threshold) {
-            if (Math.abs(v1 - v2) < 1e-6) return [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
-            const t = (threshold - v1) / (v2 - v1);
+            if (Math.abs(v1 - v2) < 1e-10) {
+                // Values are essentially equal, return midpoint
+                return [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
+            }
+            
+            // Linear interpolation: find where threshold crosses the edge
+            const t = Math.max(0, Math.min(1, (threshold - v1) / (v2 - v1)));
             return [
                 p1[0] + t * (p2[0] - p1[0]),
                 p1[1] + t * (p2[1] - p1[1])
             ];
         }
         
+        // Process each cell in the grid
         for (let i = 0; i < size - 1; i++) {
             for (let j = 0; j < size - 1; j++) {
                 const x = (i - size/2) * cellSize;
                 const z = (j - size/2) * cellSize;
                 
-                // Cell corners
+                // Cell corners in counter-clockwise order
                 const corners = [
-                    [x, z],                    // bottom-left
-                    [x + cellSize, z],         // bottom-right  
-                    [x + cellSize, z + cellSize], // top-right
-                    [x, z + cellSize]          // top-left
+                    [x, z],                      // 0: bottom-left
+                    [x + cellSize, z],           // 1: bottom-right  
+                    [x + cellSize, z + cellSize], // 2: top-right
+                    [x, z + cellSize]            // 3: top-left
                 ];
                 
+                // Sample values at corners
                 const values = [
-                    sdfArray[i * size + j],           // bottom-left
-                    sdfArray[(i + 1) * size + j],     // bottom-right
-                    sdfArray[(i + 1) * size + (j + 1)], // top-right
-                    sdfArray[i * size + (j + 1)]      // top-left
+                    sdfArray[i * size + j],           // 0: bottom-left
+                    sdfArray[(i + 1) * size + j],     // 1: bottom-right
+                    sdfArray[(i + 1) * size + (j + 1)], // 2: top-right
+                    sdfArray[i * size + (j + 1)]      // 3: top-left
                 ];
                 
-                // Marching squares configuration
+                // Create configuration bitmask
                 let config = 0;
-                if (values[0] > threshold) config |= 1;  // bottom-left
-                if (values[1] > threshold) config |= 2;  // bottom-right
-                if (values[2] > threshold) config |= 4;  // top-right
-                if (values[3] > threshold) config |= 8;  // top-left
+                if (values[0] > threshold) config |= 1;  // bit 0
+                if (values[1] > threshold) config |= 2;  // bit 1
+                if (values[2] > threshold) config |= 4;  // bit 2
+                if (values[3] > threshold) config |= 8;  // bit 3
                 
-                // Edge midpoints (for interpolation)
+                // Skip empty cells
+                if (config === 0 || config === 15) continue;
+                
+                // Cell edges with their endpoints and values
                 const edges = [
-                    [corners[0], corners[1], values[0], values[1]], // bottom edge
-                    [corners[1], corners[2], values[1], values[2]], // right edge
-                    [corners[2], corners[3], values[2], values[3]], // top edge
-                    [corners[3], corners[0], values[3], values[0]]  // left edge
+                    { p1: corners[0], p2: corners[1], v1: values[0], v2: values[1] }, // bottom edge
+                    { p1: corners[1], p2: corners[2], v1: values[1], v2: values[2] }, // right edge
+                    { p1: corners[2], p2: corners[3], v1: values[2], v2: values[3] }, // top edge
+                    { p1: corners[3], p2: corners[0], v1: values[3], v2: values[0] }  // left edge
                 ];
                 
-                // Marching squares lookup table
-                const lines = [];
-                switch (config) {
-                    case 1:  lines.push([0, 3]); break;           // bottom-left corner
-                    case 2:  lines.push([0, 1]); break;           // bottom-right corner
-                    case 3:  lines.push([1, 3]); break;           // bottom edge
-                    case 4:  lines.push([1, 2]); break;           // top-right corner
-                    case 5:  lines.push([0, 1], [2, 3]); break;   // saddle case
-                    case 6:  lines.push([0, 2]); break;           // right edge
-                    case 7:  lines.push([2, 3]); break;           // top-right + bottom
-                    case 8:  lines.push([2, 3]); break;           // top-left corner
-                    case 9:  lines.push([0, 2]); break;           // left edge
-                    case 10: lines.push([0, 3], [1, 2]); break;   // saddle case
-                    case 11: lines.push([1, 2]); break;           // top-left + bottom
-                    case 12: lines.push([1, 3]); break;           // top edge
-                    case 13: lines.push([0, 1]); break;           // top-left + bottom-left
-                    case 14: lines.push([0, 3]); break;           // top + bottom-right
-                    // case 0 and 15: no lines (all inside or all outside)
-                }
+                // Marching squares lookup table for line segments
+                const lineConfigs = {
+                    1:  [[0, 3]],           // bottom-left corner
+                    2:  [[0, 1]],           // bottom-right corner
+                    3:  [[1, 3]],           // bottom edge
+                    4:  [[1, 2]],           // top-right corner
+                    5:  [[0, 1], [2, 3]],   // saddle case (two separate lines)
+                    6:  [[0, 2]],           // right edge
+                    7:  [[2, 3]],           // top-right + bottom
+                    8:  [[2, 3]],           // top-left corner
+                    9:  [[0, 2]],           // left edge
+                    10: [[0, 3], [1, 2]],   // saddle case (two separate lines)
+                    11: [[1, 2]],           // top-left + bottom
+                    12: [[1, 3]],           // top edge
+                    13: [[0, 1]],           // top-left + bottom-left
+                    14: [[0, 3]]            // top + bottom-right
+                };
+                
+                const lines = lineConfigs[config] || [];
                 
                 // Generate line segments for this cell
                 for (const line of lines) {
-                    const p1 = lerp(edges[line[0]][0], edges[line[0]][1], edges[line[0]][2], edges[line[0]][3], threshold);
-                    const p2 = lerp(edges[line[1]][0], edges[line[1]][1], edges[line[1]][2], edges[line[1]][3], threshold);
+                    const edge1 = edges[line[0]];
+                    const edge2 = edges[line[1]];
                     
+                    // Calculate intersection points using linear interpolation
+                    const p1 = lerp(edge1.p1, edge1.p2, edge1.v1, edge1.v2, threshold);
+                    const p2 = lerp(edge2.p1, edge2.p2, edge2.v1, edge2.v2, threshold);
+                    
+                    // Add line segment
                     vertices.push(p1[0], 0, p1[1], p2[0], 0, p2[1]);
                 }
             }
         }
         
+        // Create geometry from vertices
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        const material = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 });return new THREE.LineSegments(geometry, material);
+        
+        const material = new THREE.LineBasicMaterial({ 
+            color: 0x00ff00, 
+            linewidth: 2 
+        });
+        
+        return new THREE.LineSegments(geometry, material);
     }
 
     createLabel(text) {
@@ -701,8 +1106,8 @@ export function setup(scene, camera, renderer) {
     const autoDecoder = new AutoDecoder(2, 64);
     const polygonDrawer = new PolygonDrawer(scene, camera, renderer, sdfGenerator);
     const latentVisualizer = new LatentSpaceVisualizer(scene, autoDecoder, sdfGenerator);
-    
-    let isTraining = false;
+      let isTraining = false;
+    let trainedAutoDecoder = null;
     
     // Training function
     async function trainModel() {
@@ -732,8 +1137,8 @@ export function setup(scene, camera, renderer) {
         tf.env().set('WEBGL_CPU_FORWARD', false);
         tf.env().set('WEBGL_FORCE_F16_TEXTURES', true);
         
-        const epochs = 5000;  // Reduced from 5000
-        const displayInterval = 500;  // Reduced from 500
+        const epochs = 5000;  //change training epochs as needed
+        const displayInterval = 200;  
         
         console.log('SDF dataset generated:', sdfDataset.length, 'shapes');
         console.log('SDF value range check:', 
@@ -791,15 +1196,36 @@ export function setup(scene, camera, renderer) {
             if (epoch % 50 === 0) {
                 await tf.nextFrame();
             }
-        }
-          console.log('Training completed!');
+        }        console.log('Training completed!');
+        
+        // Store training data in autoDecoder
+        autoDecoder.trainingData = polygonDrawer.polygons;
+        trainedAutoDecoder = autoDecoder;
+        
+        // Show save button for user gesture
+        polygonDrawer.showSaveButton();
+        
         isTraining = false;
         
         // Final visualization with contours
         await latentVisualizer.createLatentGrid(true);
     }
     
+    // Save function that requires user gesture
+    async function saveModel() {
+        if (!trainedAutoDecoder) {
+            alert('No trained model to save! Please train a model first.');
+            return;
+        }
+        
+        const saved = await trainedAutoDecoder.saveTrainedData();
+        if (saved) {
+            console.log('Training data saved successfully');
+        }
+    }
+    
     polygonDrawer.setTrainCallback(trainModel);
+    polygonDrawer.setSaveCallback(saveModel);
     
     // Add coordinate system
     const axesHelper = new THREE.AxesHelper(5);
