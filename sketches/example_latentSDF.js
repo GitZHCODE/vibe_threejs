@@ -138,6 +138,7 @@ class SDFGenerator {
         const material = new THREE.LineBasicMaterial({ color: 0xff9900, linewidth: 3 });
         return new THREE.LineSegments(geometry, material);
     }
+
 }
 
 // Auto-decoder model
@@ -167,7 +168,7 @@ class AutoDecoder {
         
         // Initialize learnable latent codes with smaller variance
         this.latentCodes = tf.variable(
-            tf.randomNormal([numShapes, this.latentDim], 0, 0.5)
+            tf.randomNormal([numShapes, this.latentDim], 0, 1)
         );
         
         // Use a smaller learning rate
@@ -191,43 +192,37 @@ class AutoDecoder {
         }
         
         return validUpdates > 0 ? totalLoss / validUpdates : NaN;
-    }
-
-    // Single training step for one shape
+    }    // Single training step for one shape
     async trainStep(shapeIndex, targetSDF) {
-        const f = () => {
-            const z = this.latentCodes.slice([shapeIndex, 0], [1, this.latentDim]);
-            const prediction = this.decoder.apply(z);
-            const target = tf.tensor2d([targetSDF], [1, this.sdfSize * this.sdfSize]);
-            const loss = tf.losses.meanSquaredError(target, prediction);
+        return tf.tidy(() => {
+            const f = () => {
+                const z = this.latentCodes.slice([shapeIndex, 0], [1, this.latentDim]);
+                const prediction = this.decoder.apply(z);
+                const target = tf.tensor2d([targetSDF], [1, this.sdfSize * this.sdfSize]);
+                const loss = tf.losses.meanSquaredError(target, prediction);
+                
+                return loss;
+            };
             
-            // Dispose intermediate tensors
-            target.dispose();
+            // Use tf.variableGrads without explicit varList - it will find all variables automatically
+            const { value, grads } = tf.variableGrads(f);
             
-            return loss;
-        };
-        
-        // Use tf.variableGrads without explicit varList - it will find all variables automatically
-        const { value, grads } = tf.variableGrads(f);
-        
-        // Check for NaN gradients
-        let hasNaN = false;
-        Object.values(grads).forEach(grad => {
-            if (grad && tf.any(tf.isNaN(grad)).dataSync()[0]) {
-                hasNaN = true;
+            // Check for NaN gradients
+            let hasNaN = false;
+            Object.values(grads).forEach(grad => {
+                if (grad && tf.any(tf.isNaN(grad)).dataSync()[0]) {
+                    hasNaN = true;
+                }
+            });
+            
+            if (!hasNaN && !tf.any(tf.isNaN(value)).dataSync()[0]) {
+                this.optimizer.applyGradients(grads);
+            } else {
+                console.warn('NaN detected in gradients or loss, skipping update');
             }
+            
+            return value;
         });
-        
-        if (!hasNaN && !tf.any(tf.isNaN(value)).dataSync()[0]) {
-            this.optimizer.applyGradients(grads);
-        } else {
-            console.warn('NaN detected in gradients or loss, skipping update');
-        }
-        
-        // Dispose gradients
-        Object.values(grads).forEach(grad => grad && grad.dispose());
-        
-        return value;
     }
 
     // Generate SDF from latent code
@@ -499,7 +494,7 @@ class LatentSpaceVisualizer {
         this.gridRange = 2;
         this.visualizationObjects = [];
     }    // Create grid visualization of latent space
-    async createLatentGrid() {
+    async createLatentGrid(showContours = false) {
         this.clearVisualization();
         
         // Get current latent codes to understand the learned space
@@ -540,18 +535,29 @@ class LatentSpaceVisualizer {
                 if (i === 0 && j === 0) {
                     console.log(`Sample SDF stats at (${x.toFixed(3)}, ${y.toFixed(3)}): min=${sdfMin.toFixed(3)}, max=${sdfMax.toFixed(3)}, mean=${sdfMean.toFixed(3)}`);
                 }
-                  // Create contour visualization
-                const contour = this.createSDFContour(sdf, 0.5);
+                
                 const contourPosition = new THREE.Vector3(
                     (i - this.gridSize/2) * 3,
                     0,
                     (j - this.gridSize/2) * 3
                 );
-                contour.position.copy(contourPosition);
-                contour.scale.setScalar(0.3);
                 
-                this.scene.add(contour);
-                this.visualizationObjects.push(contour);
+                if (showContours) {
+                    // Create contour visualization after training
+                    const contour = this.createSDFContour(sdf, 0.5);
+                    contour.position.copy(contourPosition);
+                    contour.scale.setScalar(0.3);
+                    
+                    this.scene.add(contour);
+                    this.visualizationObjects.push(contour);
+                } else {
+                    // Create SDF point visualization during training
+                    const sdfVis = this.sdfGenerator.createSDFVisualization(sdf, { x: 0, z: 0 }, 0.3);
+                    sdfVis.position.copy(contourPosition);
+                    
+                    this.scene.add(sdfVis);
+                    this.visualizationObjects.push(sdfVis);
+                }
                 
                 // Add coordinate label
                 const label = this.createLabel(`(${x.toFixed(1)}, ${y.toFixed(1)})`);
@@ -574,53 +580,89 @@ class LatentSpaceVisualizer {
                 }
             }
         }
-    }
-
-    createSDFContour(sdfArray, threshold) {
+    }createSDFContour(sdfArray, threshold) {
         const vertices = [];
         const size = this.autoDecoder.sdfSize;
         const cellSize = 10 / size;
         
+        // Linear interpolation for edge intersections
+        function lerp(p1, p2, v1, v2, threshold) {
+            if (Math.abs(v1 - v2) < 1e-6) return [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
+            const t = (threshold - v1) / (v2 - v1);
+            return [
+                p1[0] + t * (p2[0] - p1[0]),
+                p1[1] + t * (p2[1] - p1[1])
+            ];
+        }
+        
         for (let i = 0; i < size - 1; i++) {
             for (let j = 0; j < size - 1; j++) {
-                const values = [
-                    sdfArray[i * size + j],
-                    sdfArray[(i + 1) * size + j],
-                    sdfArray[(i + 1) * size + (j + 1)],
-                    sdfArray[i * size + (j + 1)]
-                ];
-                
                 const x = (i - size/2) * cellSize;
                 const z = (j - size/2) * cellSize;
                 
-                // Marching squares implementation
-                let config = 0;
-                if (values[0] > threshold) config |= 1;
-                if (values[1] > threshold) config |= 2;
-                if (values[2] > threshold) config |= 4;
-                if (values[3] > threshold) config |= 8;
+                // Cell corners
+                const corners = [
+                    [x, z],                    // bottom-left
+                    [x + cellSize, z],         // bottom-right  
+                    [x + cellSize, z + cellSize], // top-right
+                    [x, z + cellSize]          // top-left
+                ];
                 
-                // Simple contour extraction (basic cases)
-                if (config === 5 || config === 10) { // Saddle points
-                    vertices.push(
-                        x, 0, z + cellSize/2,
-                        x + cellSize, 0, z + cellSize/2,
-                        x + cellSize/2, 0, z,
-                        x + cellSize/2, 0, z + cellSize
-                    );
-                } else if (config > 0 && config < 15) {
-                    // Draw simple lines for other configurations
-                    vertices.push(
-                        x, 0, z,
-                        x + cellSize, 0, z + cellSize
-                    );
+                const values = [
+                    sdfArray[i * size + j],           // bottom-left
+                    sdfArray[(i + 1) * size + j],     // bottom-right
+                    sdfArray[(i + 1) * size + (j + 1)], // top-right
+                    sdfArray[i * size + (j + 1)]      // top-left
+                ];
+                
+                // Marching squares configuration
+                let config = 0;
+                if (values[0] > threshold) config |= 1;  // bottom-left
+                if (values[1] > threshold) config |= 2;  // bottom-right
+                if (values[2] > threshold) config |= 4;  // top-right
+                if (values[3] > threshold) config |= 8;  // top-left
+                
+                // Edge midpoints (for interpolation)
+                const edges = [
+                    [corners[0], corners[1], values[0], values[1]], // bottom edge
+                    [corners[1], corners[2], values[1], values[2]], // right edge
+                    [corners[2], corners[3], values[2], values[3]], // top edge
+                    [corners[3], corners[0], values[3], values[0]]  // left edge
+                ];
+                
+                // Marching squares lookup table
+                const lines = [];
+                switch (config) {
+                    case 1:  lines.push([0, 3]); break;           // bottom-left corner
+                    case 2:  lines.push([0, 1]); break;           // bottom-right corner
+                    case 3:  lines.push([1, 3]); break;           // bottom edge
+                    case 4:  lines.push([1, 2]); break;           // top-right corner
+                    case 5:  lines.push([0, 1], [2, 3]); break;   // saddle case
+                    case 6:  lines.push([0, 2]); break;           // right edge
+                    case 7:  lines.push([2, 3]); break;           // top-right + bottom
+                    case 8:  lines.push([2, 3]); break;           // top-left corner
+                    case 9:  lines.push([0, 2]); break;           // left edge
+                    case 10: lines.push([0, 3], [1, 2]); break;   // saddle case
+                    case 11: lines.push([1, 2]); break;           // top-left + bottom
+                    case 12: lines.push([1, 3]); break;           // top edge
+                    case 13: lines.push([0, 1]); break;           // top-left + bottom-left
+                    case 14: lines.push([0, 3]); break;           // top + bottom-right
+                    // case 0 and 15: no lines (all inside or all outside)
+                }
+                
+                // Generate line segments for this cell
+                for (const line of lines) {
+                    const p1 = lerp(edges[line[0]][0], edges[line[0]][1], edges[line[0]][2], edges[line[0]][3], threshold);
+                    const p2 = lerp(edges[line[1]][0], edges[line[1]][1], edges[line[1]][2], edges[line[1]][3], threshold);
+                    
+                    vertices.push(p1[0], 0, p1[1], p2[0], 0, p2[1]);
                 }
             }
         }
         
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        const material = new THREE.LineBasicMaterial({ color: 0x00ff00 });        return new THREE.LineSegments(geometry, material);
+        const material = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 });return new THREE.LineSegments(geometry, material);
     }
 
     createLabel(text) {
@@ -671,8 +713,10 @@ export function setup(scene, camera, renderer) {
         
         if (isTraining) return;
         isTraining = true;
+          console.log('Starting training...');
         
-        console.log('Starting training...');
+        // Clear input SDF visualization when training starts
+        polygonDrawer.clearPreviousSDFVisualization();
         
         // Generate SDF dataset
         const sdfDataset = [];
@@ -681,16 +725,20 @@ export function setup(scene, camera, renderer) {
             const normalizedSDF = sdfGenerator.normalizeSDF(sdf);
             sdfDataset.push(normalizedSDF);
         }
+          // Initialize auto-decoder
+        await autoDecoder.initialize(sdfDataset.length);
         
-        // Initialize auto-decoder
-        await autoDecoder.initialize(sdfDataset.length);        // Training loop - DeepSDF style
-        const epochs = 1000;
-        const displayInterval = 100;
+        // Set TensorFlow.js to use less GPU memory
+        tf.env().set('WEBGL_CPU_FORWARD', false);
+        tf.env().set('WEBGL_FORCE_F16_TEXTURES', true);
+        
+        const epochs = 5000;  // Reduced from 5000
+        const displayInterval = 500;  // Reduced from 500
         
         console.log('SDF dataset generated:', sdfDataset.length, 'shapes');
         console.log('SDF value range check:', 
-            Math.min(...sdfDataset[0]), 'to', Math.max(...sdfDataset[0]));
-          for (let epoch = 0; epoch < epochs; epoch++) {
+            Math.min(...sdfDataset[0]), 'to', Math.max(...sdfDataset[0]));        for (let epoch = 0; epoch < epochs; epoch++) {
+            console.log(`Training epoch ${epoch + 1}/${epochs}`);
             // Train on ALL shapes in this epoch (like DeepSDF)
             const avgLoss = await autoDecoder.trainEpoch(sdfDataset);
             
@@ -724,8 +772,13 @@ export function setup(scene, camera, renderer) {
                 
                 // Only update visualization if loss is valid
                 if (!isNaN(avgLoss)) {
-                    await latentVisualizer.createLatentGrid();
+                    // Show SDF points during training (not contours)
+                    await latentVisualizer.createLatentGrid(false);
                 }
+                
+                // Force garbage collection and memory cleanup
+                await tf.nextFrame();
+                console.log('Memory info:', tf.memory());
             }
             
             // Stop training if loss becomes invalid
@@ -734,15 +787,16 @@ export function setup(scene, camera, renderer) {
                 break;
             }
             
-            // Allow UI to update
-            await tf.nextFrame();
+            // Periodic memory cleanup
+            if (epoch % 50 === 0) {
+                await tf.nextFrame();
+            }
         }
-        
-        console.log('Training completed!');
+          console.log('Training completed!');
         isTraining = false;
         
-        // Final visualization
-        await latentVisualizer.createLatentGrid();
+        // Final visualization with contours
+        await latentVisualizer.createLatentGrid(true);
     }
     
     polygonDrawer.setTrainCallback(trainModel);
