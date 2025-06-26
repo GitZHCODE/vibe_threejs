@@ -1,9 +1,4 @@
-4. **Results Analysis**: Check the generated outputs:
-   - `data/MLP_Building_Results/` - Optimal building coordinates and parameters
-   - `data/optimization_history/` - Optimization scores and iteration progress
-   - Generated visualizations showing heatmaps and final placements# Geospatial Data Analysis with MLP
-
-A machine learning project that analyzes geospatial data (buildings, roads, water, green spaces) using Multi-Layer Perceptron to predict optimal building locations.
+A machine learning project that analyzes geospatial data (buildings, roads, water, green spaces，etc) using Multi-Layer Perceptron to predict optimal building locations.
 
 ## Setup
 
